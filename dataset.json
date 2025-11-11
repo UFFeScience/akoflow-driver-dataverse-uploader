@@ -1,0 +1,131 @@
+{
+    "datasetVersion": {
+        "fileAccessRequest": false,
+        "metadataBlocks": {
+            "citation": {
+                "displayName": "Citation Metadata",
+                "name": "citation",
+                "fields": [
+                    {
+                        "typeName": "title",
+                        "multiple": false,
+                        "typeClass": "primitive",
+                        "value": "AkôFlow Workflow Sample Dataset"
+                    },
+                    {
+                        "typeName": "author",
+                        "multiple": true,
+                        "typeClass": "compound",
+                        "value": [
+                            {
+                                "authorName": {
+                                    "typeName": "authorName",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "AkôFlow Sample Bot"
+                                },
+                                "authorAffiliation": {
+                                    "typeName": "authorAffiliation",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "AkôFlow Labs"
+                                },
+                                "authorIdentifierScheme": {
+                                    "typeName": "authorIdentifierScheme",
+                                    "multiple": false,
+                                    "typeClass": "controlledVocabulary",
+                                    "value": "ORCID"
+                                },
+                                "authorIdentifier": {
+                                    "typeName": "authorIdentifier",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "0000-0002-9876-0000"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "typeName": "datasetContact",
+                        "multiple": true,
+                        "typeClass": "compound",
+                        "value": [
+                            {
+                                "datasetContactName": {
+                                    "typeName": "datasetContactName",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "AkôFlow Support"
+                                },
+                                "datasetContactAffiliation": {
+                                    "typeName": "datasetContactAffiliation",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "AkôFlow"
+                                },
+                                "datasetContactEmail": {
+                                    "typeName": "datasetContactEmail",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "support@akoflow.example"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "typeName": "dsDescription",
+                        "multiple": true,
+                        "typeClass": "compound",
+                        "value": [
+                            {
+                                "dsDescriptionValue": {
+                                    "typeName": "dsDescriptionValue",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "Dataset fictício com arquivos de saída gerados por um workflow de exemplo do AkôFlow."
+                                },
+                                "dsDescriptionDate": {
+                                    "typeName": "dsDescriptionDate",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "2023-06-01"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "typeName": "keyword",
+                        "multiple": true,
+                        "typeClass": "compound",
+                        "value": [
+                            {
+                                "keywordValue": {
+                                    "typeName": "keywordValue",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "workflow"
+                                }
+                            },
+                            {
+                                "keywordValue": {
+                                    "typeName": "keywordValue",
+                                    "multiple": false,
+                                    "typeClass": "primitive",
+                                    "value": "dataverse"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "typeName": "subject",
+                        "multiple": true,
+                        "typeClass": "controlledVocabulary",
+                        "value": [
+                            "Other"
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}
