@@ -12,28 +12,24 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
+from time import sleep
 from typing import Dict, Iterable
 
 from pyDataverse.api import NativeApi
 from pyDataverse.models import Datafile, Dataset, Dataverse
 
-DATASET_FILENAME = "dataset.json"
-DATASET_SAMPLE_FILENAME = "dataset.sample.json"
+DATASET_TEMPLATE_FILENAME = "dataset.sample.json"
 
 
-def default_dataset_template_path() -> str:
-    """Resolve o caminho padrão do template de dataset."""
-    base_dir = Path(__file__).parent
-    dataset_path = base_dir / DATASET_FILENAME
-    if dataset_path.is_file():
-        return str(dataset_path)
-    sample_path = base_dir / DATASET_SAMPLE_FILENAME
+def default_dataset_template_path() -> Path:
+    """Resolve o caminho padrão do template de dataset (único template suportado)."""
+    sample_path = Path(__file__).parent / DATASET_TEMPLATE_FILENAME
     if sample_path.is_file():
-        return str(sample_path)
-    # Retorna o caminho esperado para facilitar mensagens de erro posteriores.
-    return str(dataset_path)
+        return sample_path
+    raise FileNotFoundError(f"Template de dataset não encontrado em {sample_path}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,14 +78,26 @@ def parse_args() -> argparse.Namespace:
         help="Descrição do Dataverse filho.",
     )
     parser.add_argument(
-        "--dataset-json",
-        default=os.environ.get("DATASET_JSON_PATH") or default_dataset_template_path(),
-        help="Caminho para o template JSON do dataset.",
-    )
-    parser.add_argument(
         "--data-root",
         default=os.environ.get("DATA_ROOT", "/data"),
         help="Diretório raiz com os arquivos produzidos pelo workflow.",
+    )
+    parser.add_argument(
+        "--upload-retries",
+        type=int,
+        default=int(os.environ.get("DATAVERSE_UPLOAD_RETRIES", 3)),
+        help="Número de tentativas por arquivo em caso de erro (default: 3).",
+    )
+    parser.add_argument(
+        "--upload-retry-delay",
+        type=float,
+        default=float(os.environ.get("DATAVERSE_UPLOAD_RETRY_DELAY", 2)),
+        help="Intervalo em segundos entre tentativas de upload (default: 2).",
+    )
+    parser.add_argument(
+        "--concurrent-upload",
+        action="store_true",
+        help="Envia arquivos em paralelo em vez de sequencialmente.",
     )
     parser.add_argument(
         "--title-suffix",
@@ -103,17 +111,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--citation-title",
-        default=os.environ.get("DATASET_TITLE"),
+        required=True,
         help="Título base do dataset (antes do sufixo).",
     )
     parser.add_argument(
         "--author-name",
-        default=os.environ.get("DATASET_AUTHOR_NAME"),
+        required=True,
         help="Nome do autor principal descrito no metadata.",
     )
     parser.add_argument(
         "--author-affiliation",
-        default=os.environ.get("DATASET_AUTHOR_AFFILIATION"),
+        required=True,
         help="Afiliacão do autor.",
     )
     parser.add_argument(
@@ -128,17 +136,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--contact-name",
-        default=os.environ.get("DATASET_CONTACT_NAME"),
+        required=True,
         help="Nome do contato do dataset.",
     )
     parser.add_argument(
         "--contact-email",
-        default=os.environ.get("DATASET_CONTACT_EMAIL"),
+        required=True,
         help="Email do contato do dataset.",
     )
     parser.add_argument(
         "--dataset-description",
-        default=os.environ.get("DATASET_DESCRIPTION"),
+        required=True,
         help="Descrição do dataset (campo dsDescriptionValue).",
     )
     return parser.parse_args()
@@ -341,21 +349,74 @@ def create_dataset(api: NativeApi, dataverse_alias: str, dataset: Dataset) -> st
     return dataset_pid
 
 
-def upload_files(api: NativeApi, dataset_pid: str, files: Iterable[Path]) -> None:
-    for file_path in files:
-        print(f"Enviando arquivo: {file_path}")
+def _upload_single_file(
+    api: NativeApi,
+    dataset_pid: str,
+    file_path: Path,
+    retries: int,
+    retry_delay: float,
+) -> None:
+    attempts = 0
+    while True:
+        attempts += 1
+        print(f"Enviando arquivo (tentativa {attempts}/{retries}): {file_path}")
         datafile = Datafile()
         datafile.set({"pid": dataset_pid, "filename": file_path.name})
         response = api.upload_datafile(dataset_pid, str(file_path), datafile.json())
 
-        if response.status_code not in {200, 201}:
-            try:
-                detail = response.json()
-            except ValueError:
-                detail = response.text
+        if response.status_code in {200, 201}:
+            print(f"Upload concluído: {file_path}")
+            return
+
+        try:
+            detail = response.json()
+        except ValueError:
+            detail = response.text
+
+        if attempts >= retries:
             raise RuntimeError(
-                f"Falha ao enviar '{file_path}' (status {response.status_code}): {detail}"
+                f"Falha ao enviar '{file_path}' após {attempts} tentativas (status {response.status_code}): {detail}"
             )
+
+        sleep(retry_delay)
+
+
+def upload_files(
+    api: NativeApi,
+    dataset_pid: str,
+    files: Iterable[Path],
+    concurrent: bool = False,
+    retries: int = 3,
+    retry_delay: float = 2.0,
+) -> None:
+    if not concurrent:
+        for file_path in files:
+            _upload_single_file(api, dataset_pid, file_path, retries, retry_delay)
+        return
+
+    file_list = list(files)
+    errors = []
+
+    with ThreadPoolExecutor() as executor:
+        future_to_file = {
+            executor.submit(
+                _upload_single_file, api, dataset_pid, file_path, retries, retry_delay
+            ): file_path
+            for file_path in file_list
+        }
+
+        for future in as_completed(future_to_file):
+            file_path = future_to_file[future]
+            try:
+                future.result()
+            except Exception as exc:  # noqa: BLE001
+                errors.append((file_path, exc))
+
+    if errors:
+        file_path, exc = errors[0]
+        raise RuntimeError(
+            f"Falha ao enviar arquivos (exemplo: '{file_path}'): {exc}"
+        ) from exc
 
 
 def main() -> int:
@@ -369,7 +430,11 @@ def main() -> int:
     base_url = ensure_trailing_slash(args.base_url)
     api = NativeApi(base_url, args.api_token)
 
-    dataset = build_dataset(Path(args.dataset_json), args)
+    data_root = Path(args.data_root)
+    files = list(iter_files(data_root))
+
+    template_path = default_dataset_template_path()
+    dataset = build_dataset(template_path, args)
 
     ensure_dataverse_exists(
         api,
@@ -382,12 +447,17 @@ def main() -> int:
         skip_creation=args.skip_dataverse_creation,
     )
     dataset_pid = create_dataset(api, args.dataverse_alias, dataset)
-
-    files = list(iter_files(Path(args.data_root)))
     if not files:
         print("Nenhum arquivo encontrado para upload, dataset criado sem dados.")
     else:
-        upload_files(api, dataset_pid, files)
+        upload_files(
+            api,
+            dataset_pid,
+            files,
+            concurrent=args.concurrent_upload,
+            retries=max(1, args.upload_retries),
+            retry_delay=max(0, args.upload_retry_delay),
+        )
 
     print("Publicação concluída com sucesso.")
     return 0

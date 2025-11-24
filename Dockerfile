@@ -2,7 +2,7 @@ FROM python:3.11-alpine
 
 WORKDIR /app
 
-COPY script.py dataset.json dataset.sample.json /app/
+COPY script.py dataset.sample.json /app/
 
 RUN pip install --no-cache-dir pyDataverse
 
