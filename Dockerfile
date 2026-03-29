@@ -12,3 +12,4 @@ ENV DATAVERSE_BASE_URL=https://demo.dataverse.org \
 
 ENTRYPOINT ["/bin/sh","-c"]
 CMD ["python /app/script.py"]
+
